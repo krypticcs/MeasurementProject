@@ -1,4 +1,5 @@
 #imports
+import os
 import argparse
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -8,8 +9,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_utils.data_utils import DataProcessor
-from model.model import SegUNet
+from SEGMENTATIONS.original_seg.data_utils.data_utils import DataProcessor
+from SEGMENTATIONS.original_seg.model.model import SegUNet
 
 #==========#
 
@@ -30,7 +31,7 @@ parser = argparse.ArgumentParser(description = "Model training")
 
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
 
-parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./model_saves/)")
+parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./SEGMENTATIONS/original_seg/model_saves/)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
 parser.add_argument("--val_split", type = float, default = 0.1, required = False, help = "Validation set split")
@@ -78,8 +79,8 @@ dataset, dataloader = data_processor.create_ds(test_set_name)
 #model set up
 model = SegUNet()
 
-model.load_state_dict(torch.load(f"./model_saves/{model_path}"))
-print(f"\n==========\n\nModel loaded from./model_saves/{model_path}")
+model.load_state_dict(torch.load(f"./SEGMENTATIONS/original_seg/model_saves/{model_path}"))
+print(f"\n==========\n\nModel loaded from ./SEGMENTATIONS/original_seg/model_saves/{model_path}")
 
 #testing
 print("\n==========\n\nTesting started\n\n")
@@ -87,6 +88,7 @@ print("\n==========\n\nTesting started\n\n")
 model.to(device)
 model.eval()
 
+os.makedirs("./SEGMENTATIONS/original_seg/test_results/img", exist_ok = True)
 with torch.no_grad():
     for idx, (xrays, segs) in enumerate(tqdm(dataloader, unit = "batch")):
         xrays = xrays.to(device)
@@ -109,6 +111,7 @@ with torch.no_grad():
         colordiff = torch.cat((pred, emptychan, segs), dim = 1)
         plt.imshow(colordiff[0].detach().cpu().permute(1, 2, 0))
 
-        plt.savefig(f"./test_results/img/{idx}.png")
+        plt.savefig(f"./SEGMENTATIONS/original_seg/test_results/img/{idx}.png")
+        plt.close()
 
 print("\n==========\n\nDone\n")

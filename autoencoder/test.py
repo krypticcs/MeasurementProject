@@ -8,8 +8,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_utils.data_utils import DataProcessor
-from model.model import Autoencoder
+from autoencoder.data_utils.data_utils import DataProcessor
+from autoencoder.model.model import Autoencoder
 
 #==========#
 
@@ -28,12 +28,12 @@ else:
 
 parser = argparse.ArgumentParser(description = "Model training")
 
-parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ../data)")
+parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
 
 parser.add_argument("--resid", action = "store_true", help = "Residual connections for autoencoder")
 
-parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./model_saves/)")
+parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./autoencoder/model_saves/)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
 parser.add_argument("--val_split", type = float, default = 0.1, required = False, help = "Validation set split")
@@ -85,8 +85,8 @@ dataset, dataloader = data_processor.create_ds(test_set_name)
 #model set up
 model = Autoencoder(model_resid, channel_cnt = [1, 64, 128, 32, 1])
 
-model.load_state_dict(torch.load(f"./model_saves/{model_path}"))
-print(f"\n==========\n\nModel loaded from./model_saves/{model_path}")
+model.load_state_dict(torch.load(f"./autoencoder/model_saves/{model_path}"))
+print(f"\n==========\n\nModel loaded from ./autoencoder/model_saves/{model_path}")
 
 #testing
 print("\n==========\n\nTesting started\n\n")
@@ -94,7 +94,7 @@ print("\n==========\n\nTesting started\n\n")
 model.to(device)
 model.eval()
 
-os.makedirs("./test_results", exist_ok=True)
+os.makedirs("./autoencoder/test_results", exist_ok=True)
 with torch.no_grad():
     for idx, images in enumerate(tqdm(dataloader, unit = "batch")):
         images = images.to(device)
@@ -106,7 +106,8 @@ with torch.no_grad():
         plt.imshow(images[0][0].detach().cpu(), cmap = 'gray')
         plt.subplot(1, 2, 2)
         plt.imshow(pred[0][0].detach().cpu(), cmap = 'gray')
-        plt.savefig(f"./test_results/{idx}.png")
+        plt.savefig(f"./autoencoder/test_results/{idx}.png")
+        plt.close()
 
         #testing
         #predenc = model.enc(images)

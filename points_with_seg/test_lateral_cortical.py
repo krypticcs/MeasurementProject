@@ -1,12 +1,14 @@
 #imports
+import os
 import argparse
 import pandas as pd
 from tqdm import tqdm
 
 import torch
 
-from data_utils.data_utils import DataProcessor
-from model.model import SimpleCNNModel, AlexNet, model_to_coord, measurements_to_coord, coord_to_measurements
+from points_with_seg.data_utils.data_utils import DataProcessor
+from points_with_seg.model.model import SimpleCNNModel
+from common.geometry import PIX_PER_MM, model_to_coord, measurements_to_coord_points
 
 #==========#
 
@@ -25,12 +27,11 @@ else:
 
 parser = argparse.ArgumentParser(description = "Lateral cortical thickness diagnostic")
 
-parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ../data/measurements)")
-parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ../data)")
+parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ./data/measurements)")
+parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
-parser.add_argument("--model", type = str, required = True, help = "Model type (basic, alex)")
 
-parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./model_saves/)")
+parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./points_with_seg/model_saves/)")
 parser.add_argument("--bn", type = str, default = "none", required = False, help = "Batch norm setting (none, before, after)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
@@ -40,7 +41,7 @@ args = parser.parse_args()
 
 #settings
 
-pix_per_mm = 2400 / 408
+pix_per_mm = PIX_PER_MM
 img_scale_factor = 0.1
 img_width = int(2400 * img_scale_factor)
 img_height = int(1920 * img_scale_factor)
@@ -48,7 +49,6 @@ img_height = int(1920 * img_scale_factor)
 measurement_file = args.mdata
 img_dir = args.idata
 test_set_name = args.ds.lower()
-model_name = args.model
 
 model_path = args.path
 batch_norm_setting = args.bn
@@ -66,12 +66,10 @@ dataset, dataloader = data_processor.create_ds(test_set_name)
 #==========#
 
 #model set up
-if model_name == "basic":
-    model = SimpleCNNModel(img_width, img_height, batch_norm_setting)
-elif model_name == "alex":
-    model = AlexNet(img_width, img_height, batch_norm_setting)
+seg_model_path = "./SEGMENTATIONS/mod_seg/model_saves/segunet.pth"
+model = SimpleCNNModel(img_width, img_height, batch_norm_setting, seg_model_path)
 
-model.load_state_dict(torch.load(f"./model_saves/{model_path}"))
+model.load_state_dict(torch.load(f"./points_with_seg/model_saves/{model_path}"))
 
 model.to(device)
 model.eval()
@@ -97,7 +95,7 @@ with torch.no_grad():
         pred_mm = pred_px / (pix_per_mm * img_scale_factor)
 
         #ground truth keypoints
-        real_coord = measurements_to_coord(yvals, ab, pix_per_mm, img_scale_factor)
+        real_coord = measurements_to_coord_points(yvals, ab, pix_per_mm, img_scale_factor)
         real_Y_x = real_coord[0, 6, 0].item()
         real_Z_x = real_coord[0, 7, 0].item()
         real_px = real_Z_x - real_Y_x
@@ -121,9 +119,10 @@ with torch.no_grad():
         })
 
 df = pd.DataFrame(rows)
-df.to_csv("./test_results/lateral_cortical_diagnostic.csv", index = False)
+os.makedirs("./points_with_seg/test_results", exist_ok = True)
+df.to_csv("./points_with_seg/test_results/lateral_cortical_diagnostic.csv", index = False)
 
-print(f"\nSaved to ./test_results/lateral_cortical_diagnostic.csv ({len(rows)} rows)")
+print(f"\nSaved to ./points_with_seg/test_results/lateral_cortical_diagnostic.csv ({len(rows)} rows)")
 print(f"\nSummary:")
 print(f"  Mean real (mm):   {df['real_lat_cortical (mm)'].mean():.3f}")
 print(f"  Mean pred (mm):   {df['pred_lat_cortical (mm)'].mean():.3f}")

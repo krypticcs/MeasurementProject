@@ -10,7 +10,8 @@ import torch.nn as nn
 import torch.optim as optim
 
 from seg_heatmaps.data_utils.data_utils import DataProcessor
-from dual_heatmaps.model.model import DualSegHeatmaps, measurements_to_coord, coord_to_measurements, abs_kp_to_coord, get_ab, heatmaps_to_keypoints
+from dual_heatmaps.model.model import DualSegHeatmaps
+from common.geometry import PIX_PER_MM, HEATMAP_LABELS, HEATMAP_ABS_LABELS, MEASUREMENT_NAMES, measurements_to_coord_heatmap, coord_to_measurements, abs_kp_to_coord, get_ab, heatmaps_to_keypoints
 
 #==========#
 
@@ -33,6 +34,7 @@ parser.add_argument("--mdata", type = str, required = True, help = "Path to meas
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
 
 parser.add_argument("--makecsv", action = "store_true", help = "Make a CSV of predicted vs actual measurements")
+parser.add_argument("--mask", action = "store_true", help = "Also evaluate masked copies of each image (same masking levels as training)")
 
 parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./dual_heatmaps/model_saves/)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
@@ -46,7 +48,7 @@ args = parser.parse_args()
 
 #settings
 
-pix_per_mm = 2400 / 408
+pix_per_mm = PIX_PER_MM
 img_scale_factor = 0.1
 img_width = 240
 img_height = 192
@@ -55,6 +57,7 @@ measurement_file = args.mdata
 test_set_name = args.ds.lower()
 
 make_csv = args.makecsv
+use_mask = args.mask
 
 model_path = args.path
 seed = args.seed
@@ -70,7 +73,7 @@ if test_set_name not in ["train", "valid", "test"]:
     raise ValueError(f"Unknown dataset name \"{test_set_name}\"")
 
 print("\nSelected settings:\n")
-print(f"Measurement file: {measurement_file}\nSelected dataset: {test_set_name}\nMake result CSV: {make_csv}\n")
+print(f"Measurement file: {measurement_file}\nSelected dataset: {test_set_name}\nMake result CSV: {make_csv}\nMasked copies: {use_mask}\n")
 print(f"Torch seed: {seed}\n")
 print(f"Data split: {(train_split, val_split, 1 - train_split - val_split)}")
 print(f"Batch size: {batch_sizes}\n")
@@ -78,7 +81,7 @@ print(f"Batch size: {batch_sizes}\n")
 #==========#
 
 print("==========\n\nBegin dataset loading:\n")
-NOISE_AUG = (0, 0.5, 0.25)
+NOISE_AUG = (0, 0.5, 0.25) if use_mask else (0, 0, 1)
 data_processor = DataProcessor(measurement_file, (train_split, val_split), batch_sizes, img_width, img_height, seed)
 dataset, dataloader = data_processor.create_ds(test_set_name, noise_rng = NOISE_AUG)
 
@@ -101,7 +104,7 @@ total_percent_err = torch.zeros(10).to(device)
 all_measurements = None
 
 
-mnames = ["M. Cortical", "L. Cortical", "Shaft Width", "F. Head Diam.", "H. Offset", "V. Offset", "F. Neck Width", "Hip Axis Length", "F. Neck Axis Length", "F. Neck-Shaft Ang."]
+mnames = MEASUREMENT_NAMES
 mcols = []
 for i in mnames:
     mcols.append(i + " (pred)")
@@ -123,8 +126,8 @@ with torch.no_grad():
         abs_coord = heatmaps_to_keypoints(hm)
         model_coord = abs_kp_to_coord(abs_coord)
         ab = get_ab(model_coord)
-        real_coord = measurements_to_coord(yvals, ab, pix_per_mm, img_scale_factor)
-        ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor)
+        real_coord = measurements_to_coord_heatmap(yvals, ab, pix_per_mm, img_scale_factor)
+        ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor, flip_y = True)
 
         errs = torch.abs(yvals - ypred)
         if all_errs is None:
@@ -139,7 +142,7 @@ with torch.no_grad():
         plt.subplot(1, 2, 1)
         plt.imshow(images[0][0].detach().cpu(), cmap = 'gray')
         plt.scatter(abs_coord[0, :, 0].detach().cpu(), abs_coord[0, :, 1].detach().cpu(), s = 10)
-        for i, label in enumerate(['A', 'D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'B']):
+        for i, label in enumerate(HEATMAP_ABS_LABELS):
             curx, cury = abs_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
@@ -147,13 +150,13 @@ with torch.no_grad():
 
         plt.subplot(1, 2, 2)
         plt.scatter(model_coord[0, :, 0].detach().cpu(), model_coord[0, :, 1].detach().cpu(), c = 'r')
-        for i, label in enumerate(['D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'B']):
+        for i, label in enumerate(HEATMAP_LABELS):
             curx, cury = model_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
             plt.text(curx + 0.5, cury + 0.5, label)
         plt.scatter(real_coord[0, :, 0].detach().cpu(), real_coord[0, :, 1].detach().cpu(), c = 'b')
-        for i, label in enumerate(['D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'B']):
+        for i, label in enumerate(HEATMAP_LABELS):
             curx, cury = real_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
@@ -163,6 +166,7 @@ with torch.no_grad():
         plt.ylabel('y (pixels)')
 
         plt.savefig(f"./dual_heatmaps/test_results/img/{idx}.png")
+        plt.close()
 
         if make_csv:
             for i in range(yvals.shape[0]):

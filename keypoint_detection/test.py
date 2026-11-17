@@ -8,8 +8,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_utils.data_utils import DataProcessor, warp_image
-from model.model import KeypointDetectionModel
+from keypoint_detection.data_utils.data_utils import DataProcessor, warp_image
+from keypoint_detection.model.model import KeypointDetectionModel
 
 #==========#
 
@@ -28,11 +28,11 @@ else:
 
 parser = argparse.ArgumentParser(description = "Model training")
 
-parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ../data)")
+parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
 
 parser.add_argument("--kcnt", type = int, default = 30, required = False, help = "Number of keypoints in trained model")
-parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./model_saves/)")
+parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./keypoint_detection/model_saves/)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
 parser.add_argument("--val_split", type = float, default = 0.1, required = False, help = "Validation set split")
@@ -82,8 +82,8 @@ dataset, dataloader = data_processor.create_ds(test_set_name)
 
 #model set up
 model = KeypointDetectionModel(keypoint_cnt, img_height, img_width)
-model.load_state_dict(torch.load(f"./model_saves/{model_path}"))
-print(f"Model loaded from./model_saves/{model_path}")
+model.load_state_dict(torch.load(f"./keypoint_detection/model_saves/{model_path}"))
+print(f"Model loaded from ./keypoint_detection/model_saves/{model_path}")
 
 #testing
 print("\n==========\n\nTesting started\n\n")
@@ -91,7 +91,7 @@ print("\n==========\n\nTesting started\n\n")
 model.to(device)
 model.eval()
 
-os.makedirs("./test_results", exist_ok=True)
+os.makedirs("./keypoint_detection/test_results", exist_ok=True)
 with torch.no_grad():
     for idx, source_images in enumerate(tqdm(dataloader, unit = "batch")):
         source_images = source_images.to(device)
@@ -118,6 +118,7 @@ with torch.no_grad():
         plt.imshow(tar_images[0, 0].cpu().numpy(), cmap = "gray")
         plt.scatter(tar_keypoints[0, :, 0].cpu().numpy(), tar_keypoints[0, :, 1].cpu().numpy(), c = "r")
 
-        plt.savefig(f"./test_results/{idx}.png")
+        plt.savefig(f"./keypoint_detection/test_results/{idx}.png")
+        plt.close()
 
 print("\n==========\n\nDone")

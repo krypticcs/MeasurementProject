@@ -1,4 +1,5 @@
 #imports
+import os
 import argparse
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -7,8 +8,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_utils.data_utils import DataProcessor
-from model.model import SegUNet
+from SEGMENTATIONS.mod_seg.data_utils.data_utils import DataProcessor
+from SEGMENTATIONS.mod_seg.model.model import SegUNet
 
 #==========#
 
@@ -31,7 +32,7 @@ parser.add_argument("--epoch", type = int, default = 100, required = False, help
 parser.add_argument("--lr", type = float, default = 1e-3, required = False, help = "Learning rate")
 parser.add_argument("--esl", type = int, default = 5, required = False, help = "Number of epochs with no improvement to early stop training")
 
-parser.add_argument("--load", type = str, default = "", required = False, help = "Load a model to continue training (./model_saves)")
+parser.add_argument("--load", type = str, default = "", required = False, help = "Load a model to continue training (./SEGMENTATIONS/mod_seg/model_saves)")
 
 parser.add_argument("--noise", action = "store_true", help = "Fill image will noise")
 parser.add_argument("--mirror", action = "store_true", help = "Mirror femur to left")
@@ -85,7 +86,7 @@ val_set, val_loader = data_processor.create_ds("valid")
 model = SegUNet()
 
 if load_path:
-    model.load_state_dict(torch.load(f"./model_saves/{load_path}"))
+    model.load_state_dict(torch.load(f"./SEGMENTATIONS/mod_seg/model_saves/{load_path}"))
 
 #loss function
 lossfn = nn.BCELoss()
@@ -96,6 +97,7 @@ optimizer = optim.Adam(model.parameters(), lr = learning_rate)
 #training
 early_stop_cnt = 0
 best_val_loss = float("inf")
+os.makedirs("./SEGMENTATIONS/mod_seg/model_saves", exist_ok = True)
 
 print("\n==========\n\nTraining started\n\n")
 for epoch in range(epoch_cnt):
@@ -143,11 +145,11 @@ for epoch in range(epoch_cnt):
     else:
         early_stop_cnt = 0
         best_val_loss = total_loss
-        torch.save(model.state_dict(), './model_saves/current_best.pth')
+        torch.save(model.state_dict(), './SEGMENTATIONS/mod_seg/model_saves/current_best.pth')
 
     if early_stop_cnt >= early_stop_lim:
         print('EARLY STOPPED')
         break
 
-model.load_state_dict(torch.load("./model_saves/current_best.pth"))
-torch.save(model.state_dict(), "./model_saves/final_model.pth")
+model.load_state_dict(torch.load("./SEGMENTATIONS/mod_seg/model_saves/current_best.pth"))
+torch.save(model.state_dict(), "./SEGMENTATIONS/mod_seg/model_saves/final_model.pth")

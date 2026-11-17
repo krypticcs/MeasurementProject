@@ -9,17 +9,21 @@ The goal: given a DXA hip X-ray image, predict 10 anatomical measurements of one
 ## File Structure
 
 ```
+common/
+    geometry.py           # Coordinate/measurement math (shared by all keypoint models)
 cnn_on_points/
     data_utils/
         data_utils.py     # Data loading, preprocessing, augmentation
     model/
-        model.py          # CNN architectures + coordinate/measurement math
+        model.py          # CNN architectures
     model_saves/          # Saved .pth model weights (gitignored)
     test_results/         # Test output images + CSVs (gitignored)
     train.py              # Training script
     test.py               # Testing script
     test_lateral_cortical.py  # Diagnostic for lateral cortical thickness
 ```
+
+All scripts are run from the project root as modules (`python3 -m cnn_on_points.train ...`), and all paths (`./data/...`, `./cnn_on_points/model_saves/...`) are relative to the root.
 
 ## The 10 Measurements
 
@@ -126,7 +130,7 @@ The 11 outputs are the keypoint parameters described above.
 
 **`BNRelu`**: Helper class for optional batch normalization. Can be "none" (just ReLU), "before" (BN then ReLU), or "after" (ReLU then BN). Note: batch norm has been found to cause issues with this model -- use "none" for best results.
 
-### 3. Coordinate Geometry (`model/model.py`)
+### 3. Coordinate Geometry (`common/geometry.py`)
 
 Three key functions convert between model outputs, keypoint coordinates, and measurements. All coordinates are in a **relative** system centered on the femur (origin = point A, the center of the femoral head).
 
@@ -136,7 +140,7 @@ Three key functions convert between model outputs, keypoint coordinates, and mea
 - Derives H' by reflecting H across B
 - Returns coordinates + the length AB (distance from head center to neck-shaft intersection)
 
-**`measurements_to_coord(measurements, ab)`**: Converts ground truth measurements (in mm) to the same keypoint coordinate system.
+**`measurements_to_coord_points(measurements, ab, pix_per_mm, img_scale_factor)`**: Converts ground truth measurements (in mm) to the same keypoint coordinate system. (The heatmap models use the sibling `measurements_to_coord_heatmap`, which appends B instead of C and flips y.)
 - First scales mm to pixels: `measurements * pix_per_mm * img_scale_factor`
 - Uses the neck-shaft angle to compute rotation, then places all points geometrically
 - Needs `ab` from the model (since AB distance isn't a ground truth measurement)
@@ -163,7 +167,7 @@ Three key functions convert between model outputs, keypoint coordinates, and mea
 
 **Training loop** (each epoch):
 1. Forward pass: image -> model -> 11 params -> `model_to_coord` -> predicted keypoints
-2. Ground truth: measurements -> `measurements_to_coord(yvals, ab)` -> real keypoints
+2. Ground truth: measurements -> `measurements_to_coord_points(yvals, ab, ...)` -> real keypoints
    - Note: `ab` comes from the **model's** prediction, not ground truth (AB isn't in the data)
 3. Loss: mean over batch of (sum of Euclidean distances between each predicted and real keypoint, divided by aug_scale)
 4. Validation: same forward pass + computes per-measurement percent error using `coord_to_measurements`
@@ -199,14 +203,12 @@ This is useful for understanding why lateral cortical error is so high: the meas
 ## Quick Start
 
 ```bash
-cd cnn_on_points
-
-# Train (from the cnn_on_points directory)
-python3 train.py --mdata 20260407.csv --idata box_images --model basic --esl 5
+# Train (from the project root)
+python3 -m cnn_on_points.train --mdata 20260407.csv --idata box_images --model basic --esl 5
 
 # Test
-python3 test.py --mdata 20260407.csv --idata box_images --ds test --model basic --makecsv
+python3 -m cnn_on_points.test --mdata 20260407.csv --idata box_images --ds test --model basic --makecsv
 
 # Lateral cortical diagnostic
-python3 test_lateral_cortical.py --mdata 20260407.csv --idata box_images --ds test --model basic
+python3 -m cnn_on_points.test_lateral_cortical --mdata 20260407.csv --idata box_images --ds test --model basic
 ```

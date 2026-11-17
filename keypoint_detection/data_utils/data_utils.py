@@ -132,7 +132,7 @@ class ImageDataset(Dataset):
 #class for creating dataset
 class DataProcessor:
     def __init__(self, img_dir, train_val_split, batch_size, img_width, img_height, seed):
-        self.img_dir = "../data/" + img_dir
+        self.img_dir = "./data/" + img_dir
         self.train_split = train_val_split[0]
         self.val_split = train_val_split[1]
         self.train_batch = batch_size[0]

@@ -1,4 +1,5 @@
 #imports
+import os
 import argparse
 from tqdm import tqdm
 
@@ -6,8 +7,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_utils.data_utils import DataProcessor
-from model.model import Autoencoder
+from autoencoder.data_utils.data_utils import DataProcessor
+from autoencoder.model.model import Autoencoder
 
 #==========#
 
@@ -26,7 +27,7 @@ else:
 
 parser = argparse.ArgumentParser(description = "Model training")
 
-parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ../data)")
+parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 
 parser.add_argument("--aug", action = "store_true", help = "Augment training and validation sets")
 parser.add_argument("--resid", action = "store_true", help = "Residual connections for autoencoder")
@@ -34,7 +35,7 @@ parser.add_argument("--resid", action = "store_true", help = "Residual connectio
 parser.add_argument("--epoch", type = int, default = 100, required = False, help = "Max number of epochs")
 parser.add_argument("--lr", type = float, default = 1e-3, required = False, help = "Learning rate")
 parser.add_argument("--esl", type = int, default = 5, required = False, help = "Number of epochs with no improvement to early stop training")
-parser.add_argument("--load", type = str, default = "", required = False, help = "Load a model to continue training (./model_saves)")
+parser.add_argument("--load", type = str, default = "", required = False, help = "Load a model to continue training (./autoencoder/model_saves)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
 parser.add_argument("--val_split", type = float, default = 0.1, required = False, help = "Validation set split")
@@ -92,7 +93,7 @@ else:
 model = Autoencoder(model_resid, channel_cnt = [1, 64, 128, 32, 1])
 
 if load_path:
-    model.load_state_dict(torch.load(f"./model_saves/{load_path}"))
+    model.load_state_dict(torch.load(f"./autoencoder/model_saves/{load_path}"))
 
 #loss function
 lossfn = nn.MSELoss()
@@ -103,6 +104,7 @@ optimizer = optim.Adam(model.parameters(), lr = learning_rate)
 #training
 early_stop_cnt = 0
 best_val_loss = float("inf")
+os.makedirs("./autoencoder/model_saves", exist_ok = True)
 
 print("\n==========\n\nTraining started\n\n")
 for epoch in range(epoch_cnt):
@@ -150,11 +152,11 @@ for epoch in range(epoch_cnt):
     else:
         early_stop_cnt = 0
         best_val_loss = total_loss
-        torch.save(model.state_dict(), './model_saves/current_best.pth')
+        torch.save(model.state_dict(), './autoencoder/model_saves/current_best.pth')
 
     if early_stop_cnt >= early_stop_lim:
         print('EARLY STOPPED')
         break
 
-model.load_state_dict(torch.load("./model_saves/current_best.pth"))
-torch.save(model.state_dict(), "./model_saves/final_model.pth")
+model.load_state_dict(torch.load("./autoencoder/model_saves/current_best.pth"))
+torch.save(model.state_dict(), "./autoencoder/model_saves/final_model.pth")

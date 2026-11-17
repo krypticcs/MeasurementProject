@@ -1,4 +1,5 @@
 #imports
+import os
 import argparse
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -61,6 +62,7 @@ print("\n==========\n\nTesting started\n\n")
 model.to(device)
 model.eval()
 
+os.makedirs("./SEGMENTATIONS/testing/test_results/img", exist_ok = True)
 with torch.no_grad():
     for idx, xrays in enumerate(tqdm(dataloader, unit = "batch")):
         xrays = xrays.to(device)
@@ -74,5 +76,6 @@ with torch.no_grad():
         plt.imshow(pred[0][0].detach().cpu(), cmap = 'gray')
 
         plt.savefig(f"./SEGMENTATIONS/testing/test_results/img/{idx}.png")
+        plt.close()
 
 print("\n==========\n\nDone\n")

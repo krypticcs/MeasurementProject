@@ -10,7 +10,9 @@ Self-supervised keypoint detection using image reconstruction. A location encode
 
 ## Usage
 ```bash
-cd keypoint_detection
-python3 train.py --mdata <csv> --idata <img_dir> --esl 5
-python3 test.py --mdata <csv> --idata <img_dir> --ds test
+# train (run from project root)
+python3 -m keypoint_detection.train --idata box_images --esl 5 --loss vgg
+
+# test
+python3 -m keypoint_detection.test --idata box_images --ds test
 ```

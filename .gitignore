@@ -1,7 +1,10 @@
 data/box_images
 data/segmentation
+data/cache/
 **/paper_testing/data
 **/test_results
 *.pth
 __pycache__/
 .DS_Store
+.venv/
+experiments/logs/

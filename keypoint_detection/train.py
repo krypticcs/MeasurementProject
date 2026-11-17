@@ -1,4 +1,5 @@
 #imports
+import os
 import argparse
 from tqdm import tqdm
 
@@ -6,9 +7,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_utils.data_utils import DataProcessor, warp_image
-from model.model import KeypointDetectionModel
-from model.vgg_loss import VggPerceptualConfig, VggPerceptualLoss
+from keypoint_detection.data_utils.data_utils import DataProcessor, warp_image
+from keypoint_detection.model.model import KeypointDetectionModel
+from keypoint_detection.model.vgg_loss import VggPerceptualConfig, VggPerceptualLoss
 
 #==========#
 
@@ -27,14 +28,14 @@ else:
 
 parser = argparse.ArgumentParser(description = "Model training")
 
-parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ../data)")
+parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 
 parser.add_argument("--kcnt", type = int, default = 30, required = False, help = "Number of keypoints")
 parser.add_argument("--epoch", type = int, default = 100, required = False, help = "Max number of epochs")
 parser.add_argument("--lr", type = float, default = 1e-3, required = False, help = "Learning rate")
 parser.add_argument("--esl", type = int, default = 5, required = False, help = "Number of epochs with no improvement to early stop training")
 parser.add_argument("--loss", type = str, default = "vgg", required = False, help = "Loss function (vgg, l2)")
-parser.add_argument("--load", type = str, default = "", required = False, help = "Load a model to continue training (./model_saves)")
+parser.add_argument("--load", type = str, default = "", required = False, help = "Load a model to continue training (./keypoint_detection/model_saves)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
 parser.add_argument("--val_split", type = float, default = 0.1, required = False, help = "Validation set split")
@@ -89,7 +90,7 @@ val_set, val_loader = data_processor.create_ds("valid")
 #model set up
 model = KeypointDetectionModel(keypoint_cnt, img_height, img_width)
 if load_path:
-    model.load_state_dict(torch.load(f"./model_saves/{load_path}"))
+    model.load_state_dict(torch.load(f"./keypoint_detection/model_saves/{load_path}"))
 
 #loss function
 if loss_name == "vgg":
@@ -112,6 +113,7 @@ optimizer = optim.Adam(model.parameters(), lr = learning_rate)
 #training
 early_stop_cnt = 0
 best_val_loss = float("inf")
+os.makedirs("./keypoint_detection/model_saves", exist_ok = True)
 
 print("\n==========\n\nTraining started\n\n")
 for epoch in range(epoch_cnt):
@@ -162,11 +164,11 @@ for epoch in range(epoch_cnt):
     else:
         early_stop_cnt = 0
         best_val_loss = total_loss
-        torch.save(model.state_dict(), "./model_saves/current_best.pth")
+        torch.save(model.state_dict(), "./keypoint_detection/model_saves/current_best.pth")
 
     if early_stop_cnt >= early_stop_lim:
         print("EARLY STOPPED")
         break
 
-model.load_state_dict(torch.load("./model_saves/current_best.pth"))
-torch.save(model.state_dict(), "./model_saves/final_model.pth")
+model.load_state_dict(torch.load("./keypoint_detection/model_saves/current_best.pth"))
+torch.save(model.state_dict(), "./keypoint_detection/model_saves/final_model.pth")

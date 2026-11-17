@@ -1,15 +1,27 @@
 #imports
+import argparse
 import numpy as np
 import pandas as pd
 
+#parser
+parser = argparse.ArgumentParser(description = "Null model (training set mean) baseline")
+
+parser.add_argument("--mdata", type = str, default = "20260427.csv", required = False, help = "Path to measurement data file (from ./data/measurements)")
+parser.add_argument("--seed", type = int, default = 42, required = False, help = "Numpy seed for the train/test split")
+parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
+
+args = parser.parse_args()
+
 #settings
-measurement_file = "10142025.csv"
-train_test_split = 0.8
+measurement_file = args.mdata
+train_test_split = args.train_split
+np.random.seed(args.seed)
 
 #read csv
-df = pd.read_csv(f"../data/measurements/{measurement_file}")
-df.drop(columns = ["ID", "Student Name", "Notes", "Date Completed", "Unnamed: 24", "Unnamed: 25", "Unnamed: 26", "Unnamed: 27"], inplace = True)
-df = df.dropna()
+df = pd.read_csv(f"./data/measurements/{measurement_file}")
+df.drop(columns = ["ID", "Student Name", "Notes", "Date Completed"], inplace = True, errors = "ignore")
+df = df.loc[:, ~df.columns.str.startswith("Unnamed")]
+df = df.apply(pd.to_numeric, errors = "coerce").dropna()
 
 #train test split
 all_idx = np.random.permutation(len(df))

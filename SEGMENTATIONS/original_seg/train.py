@@ -1,4 +1,5 @@
 #imports
+import os
 import argparse
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -7,8 +8,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_utils.data_utils import DataProcessor
-from model.model import SegUNet
+from SEGMENTATIONS.original_seg.data_utils.data_utils import DataProcessor
+from SEGMENTATIONS.original_seg.model.model import SegUNet
 
 #==========#
 
@@ -30,7 +31,7 @@ parser = argparse.ArgumentParser(description = "Model training")
 parser.add_argument("--epoch", type = int, default = 100, required = False, help = "Max number of epochs")
 parser.add_argument("--lr", type = float, default = 1e-3, required = False, help = "Learning rate")
 parser.add_argument("--esl", type = int, default = 5, required = False, help = "Number of epochs with no improvement to early stop training")
-parser.add_argument("--load", type = str, default = "", required = False, help = "Load a model to continue training (./model_saves)")
+parser.add_argument("--load", type = str, default = "", required = False, help = "Load a model to continue training (./SEGMENTATIONS/original_seg/model_saves)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
 parser.add_argument("--val_split", type = float, default = 0.1, required = False, help = "Validation set split")
@@ -77,7 +78,7 @@ val_set, val_loader = data_processor.create_ds("valid")
 model = SegUNet()
 
 if load_path:
-    model.load_state_dict(torch.load(f"./model_saves/{load_path}"))
+    model.load_state_dict(torch.load(f"./SEGMENTATIONS/original_seg/model_saves/{load_path}"))
 
 #loss function
 lossfn = nn.BCELoss()
@@ -88,6 +89,7 @@ optimizer = optim.Adam(model.parameters(), lr = learning_rate)
 #training
 early_stop_cnt = 0
 best_val_loss = float("inf")
+os.makedirs("./SEGMENTATIONS/original_seg/model_saves", exist_ok = True)
 
 print("\n==========\n\nTraining started\n\n")
 for epoch in range(epoch_cnt):
@@ -135,11 +137,11 @@ for epoch in range(epoch_cnt):
     else:
         early_stop_cnt = 0
         best_val_loss = total_loss
-        torch.save(model.state_dict(), './model_saves/current_best.pth')
+        torch.save(model.state_dict(), './SEGMENTATIONS/original_seg/model_saves/current_best.pth')
 
     if early_stop_cnt >= early_stop_lim:
         print('EARLY STOPPED')
         break
 
-model.load_state_dict(torch.load("./model_saves/current_best.pth"))
-torch.save(model.state_dict(), "./model_saves/final_model.pth")
+model.load_state_dict(torch.load("./SEGMENTATIONS/original_seg/model_saves/current_best.pth"))
+torch.save(model.state_dict(), "./SEGMENTATIONS/original_seg/model_saves/final_model.pth")

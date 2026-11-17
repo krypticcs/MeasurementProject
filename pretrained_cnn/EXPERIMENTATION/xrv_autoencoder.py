@@ -3,7 +3,7 @@ import torchxrayvision as xrv
 import pydicom
 import matplotlib.pyplot as plt
 
-ds = pydicom.dcmread('../../data/box_images/9927054_20051216.dcm')
+ds = pydicom.dcmread('./data/box_images/9927054_20051216.dcm')
 img = ds.pixel_array
 
 transform = T.Compose([

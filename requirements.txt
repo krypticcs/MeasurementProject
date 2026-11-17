@@ -1,0 +1,14 @@
+# Install PyTorch with CUDA first (pick the index matching your driver, see https://pytorch.org/get-started/locally/):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+torch
+torchvision
+numpy
+pandas
+pydicom
+tqdm
+matplotlib
+nibabel
+torchxrayvision
+setuptools<82
+#classic OAuth2/Client API used by data/download_images_from_box.py (boxsdk 10+ is a different SDK)
+boxsdk<4

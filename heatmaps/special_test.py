@@ -8,8 +8,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_utils.data_utils import DataProcessor
-from model.model import HeatmapsModel, measurements_to_coord, coord_to_measurements, abs_kp_to_coord, get_ab
+from heatmaps.data_utils.data_utils import DataProcessor
+from heatmaps.model.model import HeatmapsModel
+from common.geometry import PIX_PER_MM, coord_to_measurements, abs_kp_to_coord, get_ab
 
 #==========#
 
@@ -28,12 +29,12 @@ else:
 
 parser = argparse.ArgumentParser(description = "Model training")
 
-parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ../data/measurements)")
-parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ../data)")
+parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ./data/measurements)")
+parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
 parser.add_argument("--model", type = str, required = True, help = "Model type (hm)")
 
-parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./model_saves/)")
+parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./heatmaps/model_saves/)")
 parser.add_argument("--bn", type = str, default = "none", required = False, help = "Batch norm setting (none, before, after)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
@@ -46,8 +47,8 @@ args = parser.parse_args()
 
 #settings
 
-pix_per_mm = 2400 / 408 
-img_scale_factor = 0.1 
+pix_per_mm = PIX_PER_MM
+img_scale_factor = 0.1
 img_width = int(2400 * img_scale_factor)
 img_height = int(1920 * img_scale_factor)
 
@@ -92,8 +93,8 @@ dataset, dataloader = data_processor.create_ds(test_set_name)
 if model_name == "hm":
     model = HeatmapsModel(img_width, img_height, 13) #include A
 
-model.load_state_dict(torch.load(f"./model_saves/{model_path}"))
-print(f"\n==========\n\nModel loaded from./model_saves/{model_path}")
+model.load_state_dict(torch.load(f"./heatmaps/model_saves/{model_path}"))
+print(f"\n==========\n\nModel loaded from ./heatmaps/model_saves/{model_path}")
 
 #testing
 print("\n==========\n\nTesting started\n\n")
@@ -113,7 +114,7 @@ with torch.no_grad():
         abs_coord = model(img)
         model_coord = abs_kp_to_coord(abs_coord)
         ab = get_ab(model_coord)
-        ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor)
+        ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor, flip_y = True)
         print("Original:")
         print(torch.abs(yvals - ypred) / yvals)
         plt.subplot(1, 4, 1)
@@ -136,7 +137,7 @@ with torch.no_grad():
         abs_coord = model(noise)
         model_coord =  abs_kp_to_coord(abs_coord)
         ab = get_ab(model_coord)
-        ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor)
+        ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor, flip_y = True)
         print("All noise:")
         print(torch.abs(yvals - ypred) / yvals)
         plt.subplot(1, 4, 2)
@@ -154,7 +155,7 @@ with torch.no_grad():
         abs_coord = model(part_noise)
         model_coord = abs_kp_to_coord(abs_coord)
         ab = get_ab(model_coord)
-        ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor)
+        ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor, flip_y = True)
         print("Part noise:")
         print(torch.abs(yvals - ypred) / yvals)
         plt.subplot(1, 4, 3)

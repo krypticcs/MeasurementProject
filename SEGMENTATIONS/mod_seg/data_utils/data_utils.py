@@ -85,8 +85,8 @@ class ImageDataset(Dataset):
 #class for creating dataset
 class DataProcessor:
     def __init__(self, train_val_split, batch_size, og_width, og_height, tar_width, tar_height, seed, fill_noise, mirror):
-        self.xrayfi = "../../data/segmentation/data/xray/"
-        self.segfi = "../../data/segmentation/data/seg/"
+        self.xrayfi = "./data/segmentation/data/xray/"
+        self.segfi = "./data/segmentation/data/seg/"
 
         self.train_split = train_val_split[0]
         self.val_split = train_val_split[1]

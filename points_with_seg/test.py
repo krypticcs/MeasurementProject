@@ -10,7 +10,8 @@ import torch.nn as nn
 import torch.optim as optim
 
 from points_with_seg.data_utils.data_utils import DataProcessor
-from points_with_seg.model.model import SimpleCNNModel, model_to_coord, measurements_to_coord, coord_to_measurements
+from points_with_seg.model.model import SimpleCNNModel
+from common.geometry import PIX_PER_MM, POINTS_LABELS, MEASUREMENT_NAMES, model_to_coord, measurements_to_coord_points, coord_to_measurements
 
 #==========#
 
@@ -48,7 +49,7 @@ args = parser.parse_args()
 
 #settings
 
-pix_per_mm = 2400 / 408 
+pix_per_mm = PIX_PER_MM
 img_scale_factor = 0.1
 img_width = int(2400 * img_scale_factor)
 img_height = int(1920 * img_scale_factor)
@@ -107,7 +108,7 @@ total_percent_err = torch.zeros(10).to(device)
 all_measurements = None
 
 
-mnames = ["M. Cortical", "L. Cortical", "Shaft Width", "F. Head Diam.", "H. Offset", "V. Offset", "F. Neck Width", "Hip Axis Length", "F. Neck Axis Length", "F. Neck-Shaft Ang."]
+mnames = MEASUREMENT_NAMES
 mcols = []
 for i in mnames:
     mcols.append(i + " (pred)")
@@ -127,7 +128,7 @@ with torch.no_grad():
 
         model_out = model(images)
         model_coord, ab = model_to_coord(model_out)
-        real_coord = measurements_to_coord(yvals, ab, pix_per_mm, img_scale_factor)
+        real_coord = measurements_to_coord_points(yvals, ab, pix_per_mm, img_scale_factor)
         ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor)
 
         errs = torch.abs(yvals - ypred)
@@ -162,13 +163,13 @@ with torch.no_grad():
         #4: predicted vs real keypoints
         plt.subplot(1, 4, 4)
         plt.scatter(model_coord[0, :, 0].detach().cpu(), model_coord[0, :, 1].detach().cpu(), c = 'r')
-        for i, label in enumerate(['D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'C']):
+        for i, label in enumerate(POINTS_LABELS):
             curx, cury = model_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
             plt.text(curx + 0.5, cury + 0.5, label)
         plt.scatter(real_coord[0, :, 0].detach().cpu(), real_coord[0, :, 1].detach().cpu(), c = 'b')
-        for i, label in enumerate(['D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'C']):
+        for i, label in enumerate(POINTS_LABELS):
             curx, cury = real_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
@@ -179,6 +180,7 @@ with torch.no_grad():
 
         plt.tight_layout()
         plt.savefig(f"./points_with_seg/test_results/img/{idx}.png")
+        plt.close()
 
         if make_csv:
             for i in range(yvals.shape[0]):

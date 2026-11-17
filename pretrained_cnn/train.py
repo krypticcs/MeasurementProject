@@ -1,14 +1,16 @@
 #imports
+import os
 import argparse
 from tqdm import tqdm
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchxrayvision as xrv
 
-from data_utils.data_utils import DataProcessor
-from femur_model.model import FemurModel, model_to_coord, measurements_to_coord, coord_to_measurements
+from pretrained_cnn.data_utils.data_utils import DataProcessor
+from pretrained_cnn.femur_model.model import FemurModel
+from common.geometry import PIX_PER_MM, model_to_coord, measurements_to_coord_points, coord_to_measurements
+from common.losses import measurement_loss
 
 #==========#
 
@@ -27,16 +29,24 @@ else:
 
 parser = argparse.ArgumentParser(description = "Model training")
 
-parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ../data/measurements)")
-parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ../data)")
+parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ./data/measurements)")
+parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 
-parser.add_argument("--aug", action = "store_true", help = "Augment training and validation sets")
+parser.add_argument("--aug", action = "store_true", help = "Random on-the-fly augmentation of the training set (validation is never augmented)")
+parser.add_argument("--aug_repeats", type = int, default = 4, required = False, help = "Randomly augmented draws per image side per epoch (training set)")
+parser.add_argument("--aug_rot", type = float, default = 10, required = False, help = "--aug: rotation sampled in [-aug_rot, aug_rot] degrees")
+parser.add_argument("--aug_scale", type = float, default = 0.5, required = False, help = "--aug: image shrunk (zero-padded) by a factor sampled in [aug_scale, 1]")
+parser.add_argument("--aug_crop", type = float, default = 0.6, required = False, help = "--aug: bottom-right fraction kept sampled in [aug_crop, 1]")
 
 parser.add_argument("--epoch", type = int, default = 100, required = False, help = "Max number of epochs")
 parser.add_argument("--bn", type = str, default = "none", required = False, help = "Batch norm setting (none, before, after)")
 parser.add_argument("--lr", type = float, default = 1e-3, required = False, help = "Learning rate")
 parser.add_argument("--esl", type = int, default = 5, required = False, help = "Number of epochs with no improvement to early stop training")
-parser.add_argument("--load", type = str, default = "", required = False, help = "Load a model to continue training (./model_saves)")
+parser.add_argument("--meas_w", type = float, default = 0, required = False, help = "Weight of the measurement-space (relative error) loss added to the keypoint loss")
+parser.add_argument("--select", type = str, default = "loss", required = False, help = "Checkpoint selection metric on validation (loss, pe = mean percent error)")
+parser.add_argument("--run", type = str, default = "", required = False, help = "Run name: saves <run>_best.pth / <run>_final.pth instead of current_best.pth / final_model.pth")
+parser.add_argument("--load", type = str, default = "", required = False, help = "Load a model to continue training (./pretrained_cnn/model_saves)")
+parser.add_argument("--frozen_bn", action = "store_true", help = "Keep the frozen backbone in eval mode while training (its BatchNorm statistics stay at the pretrained values)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
 parser.add_argument("--val_split", type = float, default = 0.1, required = False, help = "Validation set split")
@@ -46,9 +56,17 @@ parser.add_argument("--test_bs", type = int, default = 32, required = False, hel
 
 args = parser.parse_args()
 
+meas_w = args.meas_w
+select_metric = args.select
+best_name = f"{args.run}_best.pth" if args.run else "current_best.pth"
+final_name = f"{args.run}_final.pth" if args.run else "final_model.pth"
+if select_metric not in ["loss", "pe"]:
+    raise ValueError(f"Unknown selection metric: {select_metric}")
+print(f"Measurement loss weight: {meas_w}\nCheckpoint selection: {select_metric}\nSave names: {best_name}, {final_name}\n")
+
 #settings
 
-pix_per_mm = 2400 / 408
+pix_per_mm = PIX_PER_MM
 sq_dim = 224
 img_scale_factor = sq_dim / 2400
 img_width = int(2400 * img_scale_factor)
@@ -74,7 +92,7 @@ batch_sizes = (train_batch_size, val_batch_size, test_batch_size)
 
 print("\nSelected settings:\n")
 print(f"Measurement file: {measurement_file}\nImage directory: {img_dir}\n")
-print(f"Augment data: {aug_data}\nMax epoch cnt: {epoch_cnt}\nBatch norm setting: {batch_norm_setting}\nLearning rate: {learning_rate}\nEarly stopping limit: {early_stop_lim}\nLoad pretrained: {load_path}\nTorch seed: {seed}\n")
+print(f"Augment data: {aug_data}" + (f" (rotation +-{args.aug_rot}, scale [{args.aug_scale}, 1], crop [{args.aug_crop}, 1], {args.aug_repeats} draws per femur per epoch)" if aug_data else "") + f"\nMax epoch cnt: {epoch_cnt}\nBatch norm setting: {batch_norm_setting}\nLearning rate: {learning_rate}\nEarly stopping limit: {early_stop_lim}\nLoad pretrained: {load_path}\nTorch seed: {seed}\n")
 print(f"Data split: {(train_split, val_split, 1 - train_split - val_split)}")
 print(f"Batch size: {batch_sizes}\n")
 
@@ -84,11 +102,11 @@ print(f"Batch size: {batch_sizes}\n")
 print("==========\n\nBegin dataset loading:\n")
 data_processor = DataProcessor(measurement_file, img_dir, (train_split, val_split), batch_sizes, img_width, img_height, sq_dim, seed)
 if aug_data:
-    train_set, train_loader = data_processor.create_ds("train", (-10, 10, 10), (0.5, 1, 0.25), (0.6, 1, 0.2)) #tuples are augmentation values
-    val_set, val_loader = data_processor.create_ds("valid", (-10, 10, 10), (0.5, 1, 0.25), (0.6, 1, 0.2)) #tuples are augmentation values
+    train_set, train_loader = data_processor.create_ds("train", (-args.aug_rot, args.aug_rot, 1), (args.aug_scale, 1, 1), (args.aug_crop, 1, 1), aug_repeats = args.aug_repeats) #(min, max, step) bounds; training samples uniformly in [min, max]
+    val_set, val_loader = data_processor.create_ds("valid")
 else:
-    train_set, train_loader = data_processor.create_ds("train") #tuples are augmentation values
-    val_set, val_loader = data_processor.create_ds("valid") #tuples are augmentation values
+    train_set, train_loader = data_processor.create_ds("train", aug_repeats = args.aug_repeats)
+    val_set, val_loader = data_processor.create_ds("valid")
 
 
 #==========#
@@ -99,7 +117,7 @@ for param in model.backbone.parameters():
     param.requires_grad = False
 
 if load_path:
-    model.load_state_dict(torch.load(f"./model_saves/{load_path}"))
+    model.load_state_dict(torch.load(f"./pretrained_cnn/model_saves/{load_path}"))
 
 #loss function
 lossfn = lambda ypred, yvals, aug_scales : torch.mean(torch.sum(torch.norm(ypred - yvals, dim = 2), dim = 1) / aug_scales)
@@ -110,11 +128,15 @@ optimizer = optim.Adam(model.parameters(), lr = learning_rate)
 #training
 early_stop_cnt = 0
 best_val_loss = float("inf")
+save_dir = "./pretrained_cnn/model_saves"
+os.makedirs(save_dir, exist_ok = True)
 
 print("\n==========\n\nTraining started\n\n")
 for epoch in range(epoch_cnt):
     model.to(device)
     model.train()
+    if args.frozen_bn:
+        model.backbone.eval()
 
     total_loss = 0
     
@@ -125,9 +147,11 @@ for epoch in range(epoch_cnt):
 
         model_out = model(images)
         model_coord, ab = model_to_coord(model_out)
-        real_coord = measurements_to_coord(yvals, ab, pix_per_mm, img_scale_factor)
+        real_coord = measurements_to_coord_points(yvals, ab, pix_per_mm, img_scale_factor)
 
         loss = lossfn(model_coord, real_coord, aug_scales)
+        if meas_w > 0:
+            loss = loss + meas_w * measurement_loss(model_coord, yvals, pix_per_mm, img_scale_factor)
 
         optimizer.zero_grad()
         loss.backward()
@@ -150,9 +174,11 @@ for epoch in range(epoch_cnt):
 
             model_out = model(images)
             model_coord, ab = model_to_coord(model_out)
-            real_coord = measurements_to_coord(yvals, ab, pix_per_mm, img_scale_factor)
+            real_coord = measurements_to_coord_points(yvals, ab, pix_per_mm, img_scale_factor)
 
             loss = lossfn(model_coord, real_coord, aug_scales)
+            if meas_w > 0:
+                loss = loss + meas_w * measurement_loss(model_coord, yvals, pix_per_mm, img_scale_factor)
 
             total_loss += loss.item() * images.shape[0]
 
@@ -166,16 +192,17 @@ for epoch in range(epoch_cnt):
 
         print('\n===\n')
 
-    if total_loss > best_val_loss:
+    val_metric = total_loss if select_metric == "loss" else total_percent_err.sum().item() / (10 * len(val_set))
+    if val_metric > best_val_loss:
         early_stop_cnt += 1
     else:
         early_stop_cnt = 0
-        best_val_loss = total_loss
-        torch.save(model.state_dict(), './model_saves/current_best.pth')
+        best_val_loss = val_metric
+        torch.save(model.state_dict(), f'{save_dir}/{best_name}')
 
     if early_stop_cnt >= early_stop_lim:
         print('EARLY STOPPED')
         break
 
-model.load_state_dict(torch.load("./model_saves/current_best.pth"))
-torch.save(model.state_dict(), "./model_saves/final_model.pth")
+model.load_state_dict(torch.load(f"{save_dir}/{best_name}"))
+torch.save(model.state_dict(), f"{save_dir}/{final_name}")

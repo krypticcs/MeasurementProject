@@ -7,10 +7,10 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchxrayvision as xrv
 
-from data_utils.data_utils import DataProcessor
-from femur_model.model import FemurModel, model_to_coord, measurements_to_coord, coord_to_measurements
+from pretrained_cnn.data_utils.data_utils import DataProcessor
+from pretrained_cnn.femur_model.model import FemurModel
+from common.geometry import PIX_PER_MM, POINTS_LABELS, model_to_coord, measurements_to_coord_points, coord_to_measurements
 
 #==========#
 
@@ -29,11 +29,11 @@ else:
 
 parser = argparse.ArgumentParser(description = "Model training")
 
-parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ../data/measurements)")
-parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ../data)")
+parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ./data/measurements)")
+parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
 
-parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./model_saves/)")
+parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./pretrained_cnn/model_saves/)")
 parser.add_argument("--bn", type = str, default = "none", required = False, help = "Batch norm setting (none, before, after)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
@@ -46,7 +46,7 @@ args = parser.parse_args()
 
 #settings
 
-pix_per_mm = 2400 / 408
+pix_per_mm = PIX_PER_MM
 sq_dim = 224
 img_scale_factor = sq_dim / 2400
 img_width = int(2400 * img_scale_factor)
@@ -89,8 +89,8 @@ dataset, dataloader = data_processor.create_ds(test_set_name)
 #model set up
 model = FemurModel()
 
-model.load_state_dict(torch.load(f"./model_saves/{model_path}"))
-print(f"\n==========\n\nModel loaded from./model_saves/{model_path}")
+model.load_state_dict(torch.load(f"./pretrained_cnn/model_saves/{model_path}"))
+print(f"\n==========\n\nModel loaded from ./pretrained_cnn/model_saves/{model_path}")
 
 #testing
 print("\n==========\n\nTesting started\n\n")
@@ -101,7 +101,7 @@ model.eval()
 all_errs = None
 total_percent_err = torch.zeros(10).to(device)
 
-os.makedirs("./test_results", exist_ok=True)
+os.makedirs("./pretrained_cnn/test_results", exist_ok=True)
 with torch.no_grad():
     for idx, (images, yvals, aug_scales) in enumerate(tqdm(dataloader, unit = "batch")):
         images = images.to(device)
@@ -110,7 +110,7 @@ with torch.no_grad():
 
         model_out = model(images)
         model_coord, ab = model_to_coord(model_out)
-        real_coord = measurements_to_coord(yvals, ab, pix_per_mm, img_scale_factor)
+        real_coord = measurements_to_coord_points(yvals, ab, pix_per_mm, img_scale_factor)
 
         errs = torch.abs(yvals - coord_to_measurements(model_coord, pix_per_mm, img_scale_factor))
         if all_errs is None:
@@ -125,13 +125,13 @@ with torch.no_grad():
 
         plt.subplot(1, 2, 2)
         plt.scatter(model_coord[0, :, 0].detach().cpu(), model_coord[0, :, 1].detach().cpu(), c = 'r')
-        for i, label in enumerate(['D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'C']):
+        for i, label in enumerate(POINTS_LABELS):
             curx, cury = model_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
             plt.text(curx + 0.5, cury + 0.5, label)
         plt.scatter(real_coord[0, :, 0].detach().cpu(), real_coord[0, :, 1].detach().cpu(), c = 'b')
-        for i, label in enumerate(['D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'C']):
+        for i, label in enumerate(POINTS_LABELS):
             curx, cury = real_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
@@ -139,7 +139,8 @@ with torch.no_grad():
         plt.xlabel('x (pixels)')
         plt.ylabel('y (pixels)')
 
-        plt.savefig(f"./test_results/{idx}.png")
+        plt.savefig(f"./pretrained_cnn/test_results/{idx}.png")
+        plt.close()
 
 print("\n==========\n\nDone\n")
 

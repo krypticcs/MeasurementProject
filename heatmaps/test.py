@@ -9,8 +9,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_utils.data_utils import DataProcessor
-from model.model import HeatmapsModel, measurements_to_coord, coord_to_measurements, abs_kp_to_coord, get_ab
+from heatmaps.data_utils.data_utils import DataProcessor
+from heatmaps.model.model import HeatmapsModel
+from common.geometry import PIX_PER_MM, HEATMAP_LABELS, HEATMAP_ABS_LABELS, MEASUREMENT_NAMES, measurements_to_coord_heatmap, coord_to_measurements, abs_kp_to_coord, get_ab
 
 #==========#
 
@@ -29,14 +30,14 @@ else:
 
 parser = argparse.ArgumentParser(description = "Model training")
 
-parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ../data/measurements)")
-parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ../data)")
+parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ./data/measurements)")
+parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
 parser.add_argument("--model", type = str, required = True, help = "Model type (hm)")
 
 parser.add_argument("--makecsv", action = "store_true", help = "Make a CSV of predicted vs actual measurements")
 
-parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./model_saves/)")
+parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./heatmaps/model_saves/)")
 parser.add_argument("--bn", type = str, default = "none", required = False, help = "Batch norm setting (none, before, after)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
@@ -49,8 +50,8 @@ args = parser.parse_args()
 
 #settings
 
-pix_per_mm = 2400 / 408 
-img_scale_factor = 0.1 
+pix_per_mm = PIX_PER_MM
+img_scale_factor = 0.1
 img_width = int(2400 * img_scale_factor)
 img_height = int(1920 * img_scale_factor)
 
@@ -97,8 +98,8 @@ dataset, dataloader = data_processor.create_ds(test_set_name)
 if model_name == "hm":
     model = HeatmapsModel(img_width, img_height, 13) #include A
 
-model.load_state_dict(torch.load(f"./model_saves/{model_path}"))
-print(f"\n==========\n\nModel loaded from./model_saves/{model_path}")
+model.load_state_dict(torch.load(f"./heatmaps/model_saves/{model_path}"))
+print(f"\n==========\n\nModel loaded from ./heatmaps/model_saves/{model_path}")
 
 #testing
 print("\n==========\n\nTesting started\n\n")
@@ -111,7 +112,7 @@ total_percent_err = torch.zeros(10).to(device)
 all_measurements = None
 
 
-mnames = ["M. Cortical", "L. Cortical", "Shaft Width", "F. Head Diam.", "H. Offset", "V. Offset", "F. Neck Width", "Hip Axis Length", "F. Neck Axis Length", "F. Neck-Shaft Ang."]
+mnames = MEASUREMENT_NAMES
 mcols = []
 for i in mnames:
     mcols.append(i + " (pred)")
@@ -122,7 +123,7 @@ finrow = {"id": "avg"}
 for i in mcols:
     finrow[i] = 0
 
-os.makedirs("./test_results/img", exist_ok=True)
+os.makedirs("./heatmaps/test_results/img", exist_ok=True)
 with torch.no_grad():
     for idx, (images, yvals, aug_scales) in enumerate(tqdm(dataloader, unit = "batch")):
         images = images.to(device)
@@ -132,8 +133,8 @@ with torch.no_grad():
         abs_coord = model(images)
         model_coord = abs_kp_to_coord(abs_coord)
         ab = get_ab(model_coord)
-        real_coord = measurements_to_coord(yvals, ab, pix_per_mm, img_scale_factor)
-        ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor)
+        real_coord = measurements_to_coord_heatmap(yvals, ab, pix_per_mm, img_scale_factor)
+        ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor, flip_y = True)
 
         errs = torch.abs(yvals - ypred)
         if all_errs is None:
@@ -148,7 +149,7 @@ with torch.no_grad():
         plt.subplot(1, 2, 1)
         plt.imshow(images[0][0].detach().cpu(), cmap = 'gray')
         plt.scatter(abs_coord[0, :, 0].detach().cpu(), abs_coord[0, :, 1].detach().cpu(), s = 10)
-        for i, label in enumerate(['A', 'D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'B']):
+        for i, label in enumerate(HEATMAP_ABS_LABELS):
             curx, cury = abs_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
@@ -156,13 +157,13 @@ with torch.no_grad():
 
         plt.subplot(1, 2, 2)
         plt.scatter(model_coord[0, :, 0].detach().cpu(), model_coord[0, :, 1].detach().cpu(), c = 'r')
-        for i, label in enumerate(['D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'B']):
+        for i, label in enumerate(HEATMAP_LABELS):
             curx, cury = model_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
             plt.text(curx + 0.5, cury + 0.5, label)
         plt.scatter(real_coord[0, :, 0].detach().cpu(), real_coord[0, :, 1].detach().cpu(), c = 'b')
-        for i, label in enumerate(['D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'B']):
+        for i, label in enumerate(HEATMAP_LABELS):
             curx, cury = real_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
@@ -171,7 +172,8 @@ with torch.no_grad():
         plt.xlabel('x (pixels)')
         plt.ylabel('y (pixels)')
 
-        plt.savefig(f"./test_results/img/{idx}.png")
+        plt.savefig(f"./heatmaps/test_results/img/{idx}.png")
+        plt.close()
 
         if make_csv:
             for i in range(yvals.shape[0]):
@@ -195,7 +197,7 @@ if make_csv:
         finrow[i] = round(finrow[i] / len(dataset), 3)
     resrows.append(finrow)
     df = pd.DataFrame(resrows)
-    df.to_csv("./test_results/results.csv", index = False)
+    df.to_csv("./heatmaps/test_results/results.csv", index = False)
 
 print("\n==========\n\nDone\n")
 

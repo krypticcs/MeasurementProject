@@ -9,8 +9,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_utils.data_utils import DataProcessor
-from model.model import SimpleCNNModel, AlexNet, model_to_coord, measurements_to_coord, coord_to_measurements
+from cnn_on_points.data_utils.data_utils import DataProcessor
+from cnn_on_points.model.model import SimpleCNNModel, AlexNet
+from common.geometry import PIX_PER_MM, POINTS_LABELS, MEASUREMENT_NAMES, model_to_coord, measurements_to_coord_points, coord_to_measurements
 
 #==========#
 
@@ -29,14 +30,14 @@ else:
 
 parser = argparse.ArgumentParser(description = "Model training")
 
-parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ../data/measurements)")
-parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ../data)")
+parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ./data/measurements)")
+parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
 parser.add_argument("--model", type = str, required = True, help = "Model type (basic, alex)")
 
 parser.add_argument("--makecsv", action = "store_true", help = "Make a CSV of predicted vs actual measurements")
 
-parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./model_saves/)")
+parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Model path (from ./cnn_on_points/model_saves/)")
 parser.add_argument("--bn", type = str, default = "none", required = False, help = "Batch norm setting (none, before, after)")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
@@ -49,7 +50,7 @@ args = parser.parse_args()
 
 #settings
 
-pix_per_mm = 2400 / 408 
+pix_per_mm = PIX_PER_MM
 img_scale_factor = 0.1
 img_width = int(2400 * img_scale_factor)
 img_height = int(1920 * img_scale_factor)
@@ -99,8 +100,8 @@ if model_name == "basic":
 elif model_name == "alex":
     model = AlexNet(img_width, img_height, batch_norm_setting)
 
-model.load_state_dict(torch.load(f"./model_saves/{model_path}"))
-print(f"\n==========\n\nModel loaded from./model_saves/{model_path}")
+model.load_state_dict(torch.load(f"./cnn_on_points/model_saves/{model_path}"))
+print(f"\n==========\n\nModel loaded from ./cnn_on_points/model_saves/{model_path}")
 
 #testing
 print("\n==========\n\nTesting started\n\n")
@@ -113,7 +114,7 @@ total_percent_err = torch.zeros(10).to(device)
 all_measurements = None
 
 
-mnames = ["M. Cortical", "L. Cortical", "Shaft Width", "F. Head Diam.", "H. Offset", "V. Offset", "F. Neck Width", "Hip Axis Length", "F. Neck Axis Length", "F. Neck-Shaft Ang."]
+mnames = MEASUREMENT_NAMES
 mcols = []
 for i in mnames:
     mcols.append(i + " (pred)")
@@ -124,7 +125,7 @@ finrow = {"id": "avg"}
 for i in mcols:
     finrow[i] = 0
 
-os.makedirs("./test_results/img", exist_ok=True)
+os.makedirs("./cnn_on_points/test_results/img", exist_ok=True)
 with torch.no_grad():
     for idx, (images, yvals, aug_scales) in enumerate(tqdm(dataloader, unit = "batch")):
         images = images.to(device)
@@ -133,7 +134,7 @@ with torch.no_grad():
 
         model_out = model(images)
         model_coord, ab = model_to_coord(model_out)
-        real_coord = measurements_to_coord(yvals, ab, pix_per_mm, img_scale_factor)
+        real_coord = measurements_to_coord_points(yvals, ab, pix_per_mm, img_scale_factor)
         ypred = coord_to_measurements(model_coord, pix_per_mm, img_scale_factor)
 
         errs = torch.abs(yvals - ypred)
@@ -153,13 +154,13 @@ with torch.no_grad():
 
         plt.subplot(1, 2, 2)
         plt.scatter(model_coord[0, :, 0].detach().cpu(), model_coord[0, :, 1].detach().cpu(), c = 'r')
-        for i, label in enumerate(['D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'C']):
+        for i, label in enumerate(POINTS_LABELS):
             curx, cury = model_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
             plt.text(curx + 0.5, cury + 0.5, label)
         plt.scatter(real_coord[0, :, 0].detach().cpu(), real_coord[0, :, 1].detach().cpu(), c = 'b')
-        for i, label in enumerate(['D', 'F', 'G', 'H', 'W', 'X', 'Y', 'Z', 'H\'', 'A\'', 'A\'\'', 'C']):
+        for i, label in enumerate(POINTS_LABELS):
             curx, cury = real_coord[0, i]
             curx = curx.detach().cpu()
             cury = cury.detach().cpu()
@@ -168,7 +169,7 @@ with torch.no_grad():
         plt.ylabel('y (pixels)')
 
         plt.tight_layout()
-        plt.savefig(f"./test_results/img/{idx}.png", dpi = 300)
+        plt.savefig(f"./cnn_on_points/test_results/img/{idx}.png", dpi = 300)
         plt.close()
 
         if make_csv:
@@ -193,7 +194,7 @@ if make_csv:
         finrow[i] = round(finrow[i] / len(dataset), 3)
     resrows.append(finrow)
     df = pd.DataFrame(resrows)
-    df.to_csv("./test_results/results.csv", index = False)
+    df.to_csv("./cnn_on_points/test_results/results.csv", index = False)
 
 print("\n==========\n\nDone\n")
 
