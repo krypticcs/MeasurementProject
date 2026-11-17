@@ -12,6 +12,7 @@ import torch.optim as optim
 from seg_heatmaps.data_utils.data_utils import DataProcessor
 from SEGMENTATIONS.mod_seg.model.model import SegUNet
 from common.geometry import PIX_PER_MM, HEATMAP_LABELS, HEATMAP_ABS_LABELS, MEASUREMENT_NAMES, measurements_to_coord_heatmap, coord_to_measurements, abs_kp_to_coord, get_ab, heatmaps_to_keypoints
+from common.scale import image_size
 
 #==========#
 
@@ -32,6 +33,7 @@ parser = argparse.ArgumentParser(description = "Model testing")
 
 parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ./data/measurements)")
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
+parser.add_argument("--scale", type = float, default = 0.1, required = False, help = "Image scale relative to native 2400x1920 (must match training)")
 
 parser.add_argument("--makecsv", action = "store_true", help = "Make a CSV of predicted vs actual measurements")
 parser.add_argument("--mask", action = "store_true", help = "Also evaluate masked copies of each image (same masking levels as training)")
@@ -49,9 +51,8 @@ args = parser.parse_args()
 #settings
 
 pix_per_mm = PIX_PER_MM
-img_scale_factor = 0.1
-img_width = 240
-img_height = 192
+img_scale_factor = args.scale
+img_width, img_height = image_size(img_scale_factor)
 
 measurement_file = args.mdata
 test_set_name = args.ds.lower()
@@ -74,7 +75,7 @@ if test_set_name not in ["train", "valid", "test"]:
 
 print("\nSelected settings:\n")
 print(f"Measurement file: {measurement_file}\nSelected dataset: {test_set_name}\nMake result CSV: {make_csv}\nMasked copies: {use_mask}\n")
-print(f"Torch seed: {seed}\n")
+print(f"Image scale: {img_scale_factor} ({img_width}x{img_height})\nTorch seed: {seed}\n")
 print(f"Data split: {(train_split, val_split, 1 - train_split - val_split)}")
 print(f"Batch size: {batch_sizes}\n")
 

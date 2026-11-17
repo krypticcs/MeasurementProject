@@ -20,6 +20,8 @@ NAL = femoral neck axis length, NSA = neck-shaft angle.
 seg_heatmaps 9.57%. Measurement loss: seg_heatmaps `--meas_w 50` 8.35% (section 2). Mild on-the-fly augmentation:
 cnn_on_points 8.66%, no gain for seg_heatmaps (section 3). Two-stage shaft crop on a seg_heatmaps stage 1: **7.03%**,
 with medial/lateral cortical thickness and shaft width at 14.3% / 12.1% / 4.0% instead of 22.3% / 25.6% / 8.0% (section 4).
+Training at 0.2x (480×384) instead of 0.1x did not beat those numbers (section 5): cnn_on_points 9.36%,
+seg_heatmaps meas_w 50 8.69%, two-stage on that stage 1 8.46%.
 
 ## 1. Baseline (original code, original loaders)
 
@@ -287,3 +289,69 @@ femur of each of the 171 test images.
 | two_stage on seg_heatmaps baseline | Right | 171 | 0.952 | 0.705 | 1.648 | 2.656 | 3.508 | 5.581 | 2.317 | 6.904 | 4.670 | 3.919 | 3.286 |
 | two_stage on seg_heatmaps meas_w 50 | Left | 171 | 1.044 | 0.755 | 1.510 | 2.553 | 3.387 | 6.690 | 2.029 | 6.591 | 4.583 | 3.930 | 3.307 |
 | two_stage on seg_heatmaps meas_w 50 | Right | 171 | 1.107 | 0.838 | 1.621 | 2.629 | 3.478 | 5.395 | 2.318 | 6.765 | 4.511 | 3.873 | 3.254 |
+
+## 5. 0.2x image scale (`--scale 0.2`)
+
+Native DXA is 2400×1920. `--scale 0.2` trains at **480×384** (~1.18 px/mm, cortex ≈ 8 px) instead of 240×192
+(~0.59 px/mm, cortex ≈ 4 px). Same split and seed as every other section. Batch-size defaults drop to 16/16/8 at ≥0.2.
+Code lives on branch `explore-0.2x`; tag `backup/0.1x-pre-scale` is the 0.1x tree before these changes.
+
+The frozen `segunet` encoder inside `seg_heatmaps` and the femur mask used by `two_stage` were both trained at 0.1x
+and reused without retraining (fully convolutional, but a resolution mismatch).
+
+```
+python -m cnn_on_points.train --mdata 20260427.csv --idata box_images --model basic --scale 0.2 --select pe --esl 5 --run scale02
+python -m seg_heatmaps.train  --mdata 20260427.csv --scale 0.2 --meas_w 50 --select pe --esl 5 --run scale02_measw50
+python -m two_stage.train     --mdata 20260427.csv --s1 scale02_measw50_best.pth --scale 0.2 --run scale02_s1measw50
+```
+
+### Mean percent error
+
+| Model | n | M.Cort | L.Cort | Shaft | Head | H.Off | V.Off | Neck W | HAL | NAL | NSA | Mean |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| null (train mean, same split) | 342 | 20.31% | 19.29% | 8.08% | 7.69% | 12.14% | 11.78% | 9.25% | 7.67% | 6.96% | 3.04% | 10.62% |
+| cnn_on_points select pe (0.1x) | 342 | 19.29% | 17.98% | 7.27% | 5.62% | 10.30% | 9.38% | 6.97% | 5.97% | 5.34% | 3.18% | 9.13% |
+| cnn_on_points select pe (0.2x) | 342 | 21.21% | 17.74% | 7.12% | 5.82% | 11.04% | 9.79% | 6.87% | 5.85% | 5.08% | 3.09% | 9.36% |
+| seg_heatmaps meas_w 50 (0.1x) | 342 | 20.35% | 17.76% | 6.67% | 4.93% | 8.28% | 7.65% | 5.87% | 4.94% | 3.99% | 3.02% | **8.35%** |
+| seg_heatmaps meas_w 50 (0.2x) | 342 | 19.55% | 19.42% | 6.99% | 4.82% | 9.17% | 8.25% | 6.05% | 4.94% | 4.72% | 3.00% | 8.69% |
+| two_stage on meas_w 50 (0.1x) | 342 | 15.57% | 14.16% | 4.01% | 4.93% | 8.28% | 7.65% | 5.87% | 4.94% | 3.99% | 3.02% | **7.24%** |
+| two_stage on meas_w 50 (0.2x) | 342 | 18.72% | 17.77% | 7.26% | 4.89% | 9.08% | 8.29% | 6.04% | 4.90% | 4.68% | 3.01% | 8.46% |
+
+### Mean absolute error
+
+| Model | n | M.Cort | L.Cort | Shaft | Head | H.Off | V.Off | Neck W | HAL | NAL | NSA | Mean |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| null (train mean, same split) | 342 | 1.373 | 1.029 | 3.123 | 4.035 | 4.964 | 9.068 | 3.414 | 10.191 | 7.801 | 3.948 | 4.895 |
+| cnn_on_points select pe (0.1x) | 342 | 1.377 | 0.933 | 2.859 | 2.961 | 4.222 | 7.300 | 2.567 | 8.050 | 6.096 | 4.164 | 4.053 |
+| cnn_on_points select pe (0.2x) | 342 | 1.363 | 1.014 | 2.694 | 3.022 | 4.767 | 7.508 | 2.499 | 7.830 | 5.760 | 3.997 | 4.045 |
+| seg_heatmaps meas_w 50 (0.1x) | 342 | 1.518 | 1.014 | 2.592 | 2.591 | 3.433 | 6.043 | 2.173 | 6.678 | 4.547 | 3.901 | 3.449 |
+| seg_heatmaps meas_w 50 (0.2x) | 342 | 1.406 | 1.167 | 2.726 | 2.546 | 3.713 | 6.225 | 2.231 | 6.448 | 5.207 | 3.871 | 3.554 |
+| two_stage on meas_w 50 (0.1x) | 342 | 1.075 | 0.797 | 1.566 | 2.591 | 3.433 | 6.042 | 2.173 | 6.678 | 4.547 | 3.901 | 3.280 |
+| two_stage on meas_w 50 (0.2x) | 342 | 1.288 | 1.011 | 2.883 | 2.586 | 3.686 | 6.254 | 2.235 | 6.414 | 5.174 | 3.883 | 3.541 |
+
+### Std dev of absolute error
+
+| Model | n | M.Cort | L.Cort | Shaft | Head | H.Off | V.Off | Neck W | HAL | NAL | NSA | Mean |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| null (train mean, same split) | 342 | 1.033 | 0.775 | 2.579 | 3.052 | 3.480 | 6.681 | 2.370 | 8.290 | 6.224 | 3.160 | 3.764 |
+| cnn_on_points select pe (0.1x) | 342 | 1.064 | 0.720 | 2.302 | 2.247 | 3.171 | 6.094 | 1.999 | 6.476 | 4.847 | 3.261 | 3.218 |
+| cnn_on_points select pe (0.2x) | 342 | 0.990 | 0.784 | 2.330 | 2.272 | 3.409 | 6.139 | 2.002 | 6.509 | 4.830 | 3.122 | 3.239 |
+| seg_heatmaps meas_w 50 (0.1x) | 342 | 1.140 | 0.806 | 2.120 | 2.096 | 2.739 | 5.190 | 1.573 | 5.195 | 3.689 | 2.713 | 2.726 |
+| seg_heatmaps meas_w 50 (0.2x) | 342 | 1.064 | 0.898 | 2.291 | 2.084 | 2.631 | 5.127 | 1.693 | 5.380 | 4.239 | 3.072 | 2.848 |
+| two_stage on meas_w 50 (0.1x) | 342 | 0.877 | 0.654 | 1.357 | 2.096 | 2.739 | 5.189 | 1.573 | 5.194 | 3.689 | 2.713 | 2.608 |
+| two_stage on meas_w 50 (0.2x) | 342 | 1.029 | 0.826 | 2.195 | 2.081 | 2.578 | 5.188 | 1.678 | 5.353 | 4.182 | 3.041 | 2.815 |
+
+**Takeaways.** Doubling the input resolution did not improve overall accuracy for these models.
+- `cnn_on_points` at 0.2x is slightly worse than at 0.1x (9.36% vs 9.13%). Extra pixels do not help a direct keypoint
+  regressor that already sees the whole femur.
+- `seg_heatmaps --meas_w 50` at 0.2x is also slightly worse overall (8.69% vs 8.35%). Medial cortical thickness improved
+  a little (20.4% → 19.6%); lateral cortex and several head/neck measurements got worse. Reusing a 0.1x-pretrained
+  frozen encoder on 0.2x images is a likely confounder.
+- `two_stage` on the 0.2x stage 1 barely moves the shaft metrics (18.7% / 17.8% / 7.3% vs stage 1's 19.6% / 19.4% / 7.0%)
+  and lands at 8.46% overall, far behind the 0.1x two-stage (7.24%). The femur segmenter, also trained at 0.1x, failed to
+  produce a usable mask on **62 / 342** test femurs (and 400 / 2724 train); at 0.1x that count was 0. Bad crops explain
+  why stage 2 helps so little. Retraining `mod_seg` at 0.2x (and possibly the seg_heatmaps encoder) is the natural
+  follow-up if 0.2x is pursued further.
+
+At ~8 px a cortex is still coarse for single-stage keypoints; the high-res *crop* at 0.5x (section 4) remains the change
+that actually resolves cortical thickness.

@@ -29,6 +29,7 @@ parser = argparse.ArgumentParser(description = "Two-stage model training (stage 
 
 parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ./data/measurements)")
 parser.add_argument("--s1", type = str, default = "current_best.pth", required = False, help = "Frozen stage-1 seg_heatmaps weights (from ./seg_heatmaps/model_saves/)")
+parser.add_argument("--scale", type = float, default = 0.1, required = False, help = "Stage-1 image scale (must match the seg_heatmaps checkpoint)")
 
 parser.add_argument("--epoch", type = int, default = 100, required = False, help = "Max number of epochs")
 parser.add_argument("--lr", type = float, default = 5e-4, required = False, help = "Learning rate")
@@ -49,7 +50,7 @@ final_name = f"{args.run}_final.pth" if args.run else "final_model.pth"
 save_dir = "./two_stage/model_saves"
 
 print("\nSelected settings:\n")
-print(f"Measurement file: {args.mdata}\nStage 1: ./seg_heatmaps/model_saves/{args.s1}\n")
+print(f"Measurement file: {args.mdata}\nStage 1: ./seg_heatmaps/model_saves/{args.s1}\nStage-1 scale: {args.scale}\n")
 print(f"Max epoch cnt: {args.epoch}\nLearning rate: {args.lr}\nEarly stopping limit: {args.esl}\nRepeats: {args.repeats}\nLoad pretrained: {args.load}\nTorch seed: {args.seed}\n")
 print(f"Data split: {(args.train_split, args.val_split, 1 - args.train_split - args.val_split)}")
 print(f"Batch size: {(args.train_bs, args.val_bs)}\nSave names: {best_name}, {final_name}\n")
@@ -61,8 +62,8 @@ print("==========\n\nBegin dataset loading:\n")
 split = MeasurementSplit(args.mdata, "box_images", (args.train_split, args.val_split), args.seed)
 stage1 = load_stage1(args.s1, device)
 segmenter = load_segmenter(device)
-train_set = ShaftSet(split, "train", stage1, segmenter, device)
-val_set = ShaftSet(split, "valid", stage1, segmenter, device)
+train_set = ShaftSet(split, "train", stage1, segmenter, device, scale = args.scale)
+val_set = ShaftSet(split, "valid", stage1, segmenter, device, scale = args.scale)
 del stage1, segmenter
 torch.manual_seed(args.seed)
 

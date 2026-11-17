@@ -8,7 +8,7 @@ where it is about 20 pixels wide.
 
 ## Pipeline
 
-1. **Stage 1 (frozen):** a trained `seg_heatmaps` model on the 0.1x image gives all 10 measurements.
+1. **Stage 1 (frozen):** a trained `seg_heatmaps` model on the scaled image (default 0.1x; use `--scale 0.2` with a matching checkpoint) gives all 10 measurements.
 2. **Shaft localization (frozen):** the femur segmenter `SEGMENTATIONS/mod_seg/model_saves/segunet.pth` outlines the
    femur being measured (for both sides it is the femur on the right of the possibly flipped image).
    - head center = deepest point of the mask medial to the shaft and within one (stage-1) head diameter of the top of the
@@ -42,7 +42,7 @@ python -m two_stage.train --mdata 20260427.csv --s1 baseline_best.pth --run s1ba
 python -m two_stage.test --mdata 20260427.csv --ds test --makecsv --s1 baseline_best.pth --path s1baseline_best.pth
 ```
 
-Flags: `--repeats` (jittered crops per femur per epoch, default 4), `--esl` (default 10), `--lr` (default 5e-4, halved after 2 epochs without
+Flags: `--scale` (stage-1 image scale, default 0.1; must match the `seg_heatmaps` checkpoint), `--repeats` (jittered crops per femur per epoch, default 4), `--esl` (default 10), `--lr` (default 5e-4, halved after 2 epochs without
 validation improvement; stage 2 converges in a few epochs and the validation error is noisy without it).
 Checkpoints are selected on mean validation percent error of the three shaft measurements.
 `test.py` also plots the first `--n_img` crops with the predicted W/X/Y/Z positions to `two_stage/test_results/img/`.

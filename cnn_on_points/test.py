@@ -12,6 +12,7 @@ import torch.optim as optim
 from cnn_on_points.data_utils.data_utils import DataProcessor
 from cnn_on_points.model.model import SimpleCNNModel, AlexNet
 from common.geometry import PIX_PER_MM, POINTS_LABELS, MEASUREMENT_NAMES, model_to_coord, measurements_to_coord_points, coord_to_measurements
+from common.scale import image_size
 
 #==========#
 
@@ -34,6 +35,7 @@ parser.add_argument("--mdata", type = str, required = True, help = "Path to meas
 parser.add_argument("--idata", type = str, required = True, help = "Path to image data directory (from ./data)")
 parser.add_argument("--ds", type = str, required = True, help = "Dataset to test on (train, valid, test)")
 parser.add_argument("--model", type = str, required = True, help = "Model type (basic, alex)")
+parser.add_argument("--scale", type = float, default = 0.1, required = False, help = "Image scale relative to native 2400x1920 (must match training)")
 
 parser.add_argument("--makecsv", action = "store_true", help = "Make a CSV of predicted vs actual measurements")
 
@@ -51,9 +53,8 @@ args = parser.parse_args()
 #settings
 
 pix_per_mm = PIX_PER_MM
-img_scale_factor = 0.1
-img_width = int(2400 * img_scale_factor)
-img_height = int(1920 * img_scale_factor)
+img_scale_factor = args.scale
+img_width, img_height = image_size(img_scale_factor)
 
 measurement_file = args.mdata
 img_dir = args.idata
@@ -82,7 +83,7 @@ if batch_norm_setting not in ["none", "before", "after"]:
 
 print("\nSelected settings:\n")
 print(f"Measurement file: {measurement_file}\nImage directory: {img_dir}\nSelected dataset: {test_set_name}\nMake result CSV: {make_csv}\n")
-print(f"Batch norm setting: {batch_norm_setting}\nTorch seed: {seed}\n")
+print(f"Image scale: {img_scale_factor} ({img_width}x{img_height})\nBatch norm setting: {batch_norm_setting}\nTorch seed: {seed}\n")
 print(f"Data split: {(train_split, val_split, 1 - train_split - val_split)}")
 print(f"Batch size: {batch_sizes}\n")
 

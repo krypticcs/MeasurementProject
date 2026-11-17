@@ -35,6 +35,7 @@ parser.add_argument("--makecsv", action = "store_true", help = "Make a CSV of pr
 
 parser.add_argument("--path", type = str, default = "current_best.pth", required = False, help = "Stage-2 model path (from ./two_stage/model_saves/)")
 parser.add_argument("--s1", type = str, default = "current_best.pth", required = False, help = "Stage-1 seg_heatmaps weights (from ./seg_heatmaps/model_saves/)")
+parser.add_argument("--scale", type = float, default = 0.1, required = False, help = "Stage-1 image scale (must match the seg_heatmaps checkpoint)")
 parser.add_argument("--n_img", type = int, default = 30, required = False, help = "Number of crops to plot with predicted positions")
 parser.add_argument("--seed", type = int, default = 42, required = False, help = "Torch seed")
 parser.add_argument("--train_split", type = float, default = 0.8, required = False, help = "Training set split")
@@ -49,7 +50,7 @@ if test_set_name not in ["train", "valid", "test"]:
 
 print("\nSelected settings:\n")
 print(f"Measurement file: {args.mdata}\nSelected dataset: {test_set_name}\nMake result CSV: {args.makecsv}\n")
-print(f"Stage 1: ./seg_heatmaps/model_saves/{args.s1}\nStage 2: ./two_stage/model_saves/{args.path}\nTorch seed: {args.seed}\n")
+print(f"Stage 1: ./seg_heatmaps/model_saves/{args.s1}\nStage-1 scale: {args.scale}\nStage 2: ./two_stage/model_saves/{args.path}\nTorch seed: {args.seed}\n")
 
 #==========#
 
@@ -57,7 +58,7 @@ print("==========\n\nBegin dataset loading:\n")
 split = MeasurementSplit(args.mdata, "box_images", (args.train_split, args.val_split), args.seed)
 stage1 = load_stage1(args.s1, device)
 segmenter = load_segmenter(device)
-dataset = ShaftSet(split, test_set_name, stage1, segmenter, device)
+dataset = ShaftSet(split, test_set_name, stage1, segmenter, device, scale = args.scale)
 del stage1, segmenter
 
 model = ShaftKeypointNet(pretrained = False)

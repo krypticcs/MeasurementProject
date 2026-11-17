@@ -64,6 +64,8 @@ Training flags shared by the 7 keypoint models (`cnn_on_points`, `cnn_backbone`,
 - `--select {loss,pe}`: keep the checkpoint with the lowest validation loss (default) or mean validation percent error
 - `--run <name>`: save `<name>_best.pth` / `<name>_final.pth` instead of `current_best.pth` / `final_model.pth` (test with `--path <name>_best.pth`)
 
+`--scale` (currently on `cnn_on_points`, `seg_heatmaps`, and `two_stage`): image scale relative to native 2400×1920 (default `0.1` → 240×192; `0.2` → 480×384). At ≥0.2 the usual train/val batch-size defaults are cut to 16 (override with `--train_bs` / `--val_bs`). Test with the same `--scale` as training.
+
 ## Experiments
 
 `experiments/RESULTS.md` has the baseline and every comparison on the seed-42 test split of `20260427.csv`.

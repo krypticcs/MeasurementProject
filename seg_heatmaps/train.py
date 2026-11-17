@@ -11,6 +11,7 @@ from seg_heatmaps.data_utils.data_utils import DataProcessor
 from SEGMENTATIONS.mod_seg.model.model import SegUNet
 from common.geometry import PIX_PER_MM, measurements_to_coord_heatmap, coord_to_measurements, abs_kp_to_coord, get_ab, heatmaps_to_keypoints
 from common.losses import measurement_loss
+from common.scale import image_size, default_batch_sizes
 
 #==========#
 
@@ -30,6 +31,7 @@ else:
 parser = argparse.ArgumentParser(description = "Model training")
 
 parser.add_argument("--mdata", type = str, required = True, help = "Path to measurement data file (from ./data/measurements)")
+parser.add_argument("--scale", type = float, default = 0.1, required = False, help = "Image scale relative to native 2400x1920 (0.1 -> 240x192, 0.2 -> 480x384)")
 
 parser.add_argument("--aug", action = "store_true", help = "Random on-the-fly augmentation of the training set (validation is never augmented)")
 parser.add_argument("--aug_repeats", type = int, default = 4, required = False, help = "Randomly augmented draws per image side per epoch (training set)")
@@ -66,9 +68,8 @@ print(f"Measurement loss weight: {meas_w}\nCheckpoint selection: {select_metric}
 #settings
 
 pix_per_mm = PIX_PER_MM
-img_scale_factor = 0.1
-img_width = 240
-img_height = 192
+img_scale_factor = args.scale
+img_width, img_height = image_size(img_scale_factor)
 
 measurement_file = args.mdata
 
@@ -82,13 +83,12 @@ seed = args.seed
 
 train_split = args.train_split
 val_split = args.val_split
-train_batch_size = args.train_bs
-val_batch_size = args.val_bs
-test_batch_size = args.test_bs
+train_batch_size, val_batch_size, test_batch_size = default_batch_sizes(img_scale_factor, args.train_bs, args.val_bs, args.test_bs)
 batch_sizes = (train_batch_size, val_batch_size, test_batch_size)
 
 print("\nSelected settings:\n")
 print(f"Measurement file: {measurement_file}\n")
+print(f"Image scale: {img_scale_factor} ({img_width}x{img_height})\n")
 print(f"Augment data: {aug_data}" + (f" (rotation +-{args.aug_rot}, scale [{args.aug_scale}, 1], crop [{args.aug_crop}, 1], {args.aug_repeats} draws per femur per epoch)" if aug_data else "") + f"\nMax epoch cnt: {epoch_cnt}\nLearning rate: {learning_rate}\nEarly stopping limit: {early_stop_lim}\nLoad pretrained: {load_path}\nTorch seed: {seed}\n")
 print(f"Data split: {(train_split, val_split, 1 - train_split - val_split)}")
 print(f"Batch size: {batch_sizes}\n")
